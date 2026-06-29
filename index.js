@@ -23,11 +23,50 @@ const CATEGORIES = {
   '7': '🏠 Menuisier',
   '8': '🎨 Peintre',
   '9': '🍽️ Traiteur/Cuisinier',
-  '10': '➕ Autre'
+  '10': '🛵 Livraison',
+  '11': '➕ Autre'
 };
 
 // User sessions — tracks conversation state
 const sessions = {};
+
+// Timeout trackers — 5 min per request
+const requestTimeouts = {};
+
+function setRequestTimeout(chatId, requestId) {
+  // Clear any existing timeout
+  if (requestTimeouts[chatId]) clearTimeout(requestTimeouts[chatId]);
+
+  requestTimeouts[chatId] = setTimeout(async () => {
+    // Check if request is still pending
+    const { data: request } = await supabase
+      .from('requests')
+      .select('status')
+      .eq('id', requestId)
+      .single();
+
+    if (request && request.status === 'pending') {
+      // Update request to expired
+      await supabase
+        .from('requests')
+        .update({ status: 'expired' })
+        .eq('id', requestId);
+
+      // Notify user
+      bot.sendMessage(chatId,
+        `😔 *Aucun prestataire disponible pour le moment.*\n\n` +
+        `Tous nos prestataires sont occupés. Réessayez dans 1 heure ou contactez-nous directement:\n` +
+        `📞 *+221777527465*\n\n` +
+        `Tapez /start pour une nouvelle demande.`,
+        { parse_mode: 'Markdown' }
+      );
+
+      clearSession(chatId);
+    }
+
+    delete requestTimeouts[chatId];
+  }, 5 * 60 * 1000); // 5 minutes
+}
 
 // ─────────────────────────────────────────
 // HELPERS
@@ -268,6 +307,19 @@ bot.on('message', async (msg) => {
         })
         .eq('id', provider.id);
 
+      // Cancel timeout — provider accepted
+      if (requestTimeouts[request.user_phone]) {
+        clearTimeout(requestTimeouts[request.user_phone]);
+        delete requestTimeouts[request.user_phone];
+      }
+      // Also try by chatId match
+      Object.keys(requestTimeouts).forEach(key => {
+        if (sessions[key]?.data?.requestId === request.id) {
+          clearTimeout(requestTimeouts[key]);
+          delete requestTimeouts[key];
+        }
+      });
+
       // Notify provider
       bot.sendMessage(chatId,
         `✅ *Demande acceptée!*\n\n` +
@@ -443,9 +495,12 @@ bot.on('message', async (msg) => {
             `✅ *Demande envoyée!*\n\n` +
             `Nous avons notifié *${providers.length} prestataire(s)* disponible(s).\n` +
             `Vous serez contacté(e) très bientôt.\n\n` +
+            `⏱️ Si personne ne répond dans 5 minutes, nous vous préviendrons.\n\n` +
             `📞 Support: +221777527465`,
             { parse_mode: 'Markdown' }
           );
+          // Start 5-minute timeout
+          setRequestTimeout(chatId, request.id);
         }
       }
       break;
@@ -487,7 +542,12 @@ bot.on('message', async (msg) => {
       break;
 
     default:
-      bot.sendMessage(chatId, 'Tapez /start pour commencer. 👋');
+      // Unknown message — guide user back
+      bot.sendMessage(chatId,
+        `👋 Tapez /start pour commencer.\n\n` +
+        `Besoin d'aide? Contactez-nous:\n📞 +221777527465`,
+        { parse_mode: 'Markdown' }
+      );
   }
 });
 
