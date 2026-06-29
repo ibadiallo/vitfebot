@@ -416,13 +416,14 @@ bot.on('message', async (msg) => {
           { parse_mode: 'Markdown' }
         );
       } else if (text === '2') {
-        session.state = 'provider_register';
+        session.state = 'provider_new_or_existing';
         bot.sendMessage(chatId,
-          `👷 *Inscription prestataire Vitfe*\n\n` +
-          `Pour commencer, quel est votre *prénom*?`,
+          `👷 *Espace Prestataire Vitfe*\n\n` +
+          `Êtes-vous déjà inscrit sur vitfe.vercel.app?\n\n` +
+          `1️⃣ Oui, j'ai déjà un compte\n` +
+          `2️⃣ Non, je veux m'inscrire`,
           { parse_mode: 'Markdown' }
         );
-        session.data.step = 'first_name';
       } else {
         bot.sendMessage(chatId, 'Veuillez répondre avec *1* ou *2*.', { parse_mode: 'Markdown' });
       }
@@ -534,6 +535,66 @@ bot.on('message', async (msg) => {
         `⭐ *Merci pour votre avis!*\n\nVotre évaluation aide la communauté Vitfe.\n\nTapez /start pour une nouvelle demande.`,
         { parse_mode: 'Markdown' }
       );
+      break;
+
+    // Provider — new or existing
+    case 'provider_new_or_existing':
+      if (text === '1') {
+        // Existing — ask for phone to link account
+        session.state = 'provider_link';
+        bot.sendMessage(chatId,
+          `📱 Entrez le numéro WhatsApp utilisé lors de votre inscription:\n(Ex: +221771234567)`,
+          { parse_mode: 'Markdown' }
+        );
+      } else if (text === '2') {
+        // New — full registration
+        session.state = 'provider_register';
+        session.data.step = 'first_name';
+        bot.sendMessage(chatId,
+          `👷 *Inscription prestataire Vitfe*\n\nPour commencer, quel est votre *prénom*?`,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        bot.sendMessage(chatId, 'Veuillez répondre avec *1* ou *2*.', { parse_mode: 'Markdown' });
+      }
+      break;
+
+    // Provider — link existing account
+    case 'provider_link':
+      const { data: existingProvider } = await supabase
+        .from('providers')
+        .select('*')
+        .eq('phone', text)
+        .single();
+
+      if (!existingProvider) {
+        bot.sendMessage(chatId,
+          `❌ Aucun compte trouvé avec ce numéro.\n\n` +
+          `Vérifiez le numéro ou tapez /start pour vous inscrire.`,
+          { parse_mode: 'Markdown' }
+        );
+        clearSession(chatId);
+      } else {
+        // Link telegram_chat_id to existing provider
+        await supabase
+          .from('providers')
+          .update({ telegram_chat_id: String(chatId) })
+          .eq('phone', text);
+
+        clearSession(chatId);
+        bot.sendMessage(chatId,
+          `✅ *Compte lié avec succès!*\n\n` +
+          `Bienvenue ${existingProvider.first_name} ${existingProvider.last_name}! 🎉\n\n` +
+          `${existingProvider.is_verified
+            ? '✅ Votre compte est vérifié. Vous recevrez les demandes de clients!'
+            : '⏳ Votre CNI est en cours de vérification.\nEnvoyez votre CNI à +221777527465 sur WhatsApp si ce n\'est pas encore fait.'}\n\n` +
+          `*Commandes utiles:*\n` +
+          `/dispo — Activer/désactiver disponibilité\n` +
+          `/stats — Voir vos statistiques\n` +
+          `/aide — Aide`,
+          { parse_mode: 'Markdown' }
+        );
+      }
       break;
 
     // Provider registration flow
