@@ -27,11 +27,37 @@ const CATEGORIES = {
   '11': '➕ Autre'
 };
 
-// User sessions — tracks conversation state
-const sessions = {};
-
-// Timeout trackers — 5 min per request
+// In-memory fallback for timeouts
 const requestTimeouts = {};
+
+// ─────────────────────────────────────────
+// SESSION MANAGEMENT (Supabase)
+// ─────────────────────────────────────────
+
+async function getSession(chatId) {
+  try {
+    const { data } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('chat_id', String(chatId))
+      .single();
+    if (data) return { state: data.state, data: data.session_data || {} };
+  } catch (e) {}
+  return { state: 'idle', data: {} };
+}
+
+async function setSession(chatId, state, sessionData = {}) {
+  await supabase
+    .from('sessions')
+    .upsert([{ chat_id: String(chatId), state, session_data: sessionData, updated_at: new Date() }], { onConflict: 'chat_id' });
+}
+
+async function clearSession(chatId) {
+  await supabase
+    .from('sessions')
+    .delete()
+    .eq('chat_id', String(chatId));
+}
 
 function setRequestTimeout(chatId, requestId) {
   // Clear any existing timeout
@@ -72,14 +98,7 @@ function setRequestTimeout(chatId, requestId) {
 // HELPERS
 // ─────────────────────────────────────────
 
-function getSession(chatId) {
-  if (!sessions[chatId]) sessions[chatId] = { state: 'idle', data: {} };
-  return sessions[chatId];
-}
 
-function clearSession(chatId) {
-  sessions[chatId] = { state: 'idle', data: {} };
-}
 
 function categoryMenu() {
   return Object.entries(CATEGORIES)
@@ -175,7 +194,7 @@ async function saveRating(requestId, providerId, userPhone, score, comment) {
 // /start
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
-  clearSession(chatId);
+  await clearSession(chatId);
 
   await bot.sendMessage(chatId,
     `👋 *Bienvenue sur Vitfe!*\n\n` +
@@ -187,7 +206,7 @@ bot.onText(/\/start/, async (msg) => {
     { parse_mode: 'Markdown' }
   );
 
-  getSession(chatId).state = 'main_menu';
+  await setSession(chatId, 'main_menu', {});
 });
 
 // /dispo — provider toggles availability
@@ -273,7 +292,7 @@ bot.on('message', async (msg) => {
 
   if (!text || text.startsWith('/')) return;
 
-  const session = getSession(chatId);
+  const session = await getSession(chatId);
 
   // ── Handle provider accepting/declining requests ──
   if (text.startsWith('OUI_') || text.startsWith('NON_')) {
@@ -285,17 +304,22 @@ bot.on('message', async (msg) => {
     if (!provider) return;
 
     if (action === 'OUI') {
-      // Update request
-      const { data: request } = await supabase
+      // FIX 7: Atomic update — only succeeds if status is still 'pending'
+      // This prevents two providers from accepting the same request
+      const { data: updatedRequests, error: updateError } = await supabase
         .from('requests')
         .update({ provider_id: provider.id, status: 'accepted', accepted_at: new Date() })
         .eq('id', requestId)
-        .eq('status', 'pending')
-        .select()
-        .single();
+        .eq('status', 'pending') // Only update if still pending — first wins
+        .select();
 
-      if (!request) {
-        return bot.sendMessage(chatId, '❌ Cette demande a déjà été acceptée par un autre prestataire.');
+      const request = updatedRequests?.[0];
+
+      if (!request || updateError) {
+        return bot.sendMessage(chatId,
+          `❌ *Désolé, cette demande a déjà été acceptée par un autre prestataire.*\n\nVous recevrez la prochaine! 💪`,
+          { parse_mode: 'Markdown' }
+        );
       }
 
       // Update provider stats
@@ -411,12 +435,13 @@ bot.on('message', async (msg) => {
     case 'main_menu':
       if (text === '1') {
         session.state = 'select_category';
+        await setSession(chatId, 'select_category', {});
         bot.sendMessage(chatId,
           `🔍 *Quel service recherchez-vous?*\n\n${categoryMenu()}\n\nRépondez avec le numéro.`,
           { parse_mode: 'Markdown' }
         );
       } else if (text === '2') {
-        session.state = 'provider_new_or_existing';
+        await setSession(chatId, 'provider_new_or_existing', {});
         bot.sendMessage(chatId,
           `👷 *Espace Prestataire Vitfe*\n\n` +
           `Êtes-vous déjà inscrit sur vitfe.vercel.app?\n\n` +
@@ -432,8 +457,7 @@ bot.on('message', async (msg) => {
     // User: select category
     case 'select_category':
       if (CATEGORIES[text]) {
-        session.data.category = CATEGORIES[text];
-        session.state = 'get_address';
+        await setSession(chatId, 'get_address', { category: CATEGORIES[text] });
         bot.sendMessage(chatId,
           `📍 *${CATEGORIES[text]}*\n\nQuelle est votre adresse à Dakar?\n(Ex: Plateau, Rue 10, près du marché)`,
           { parse_mode: 'Markdown' }
@@ -445,8 +469,7 @@ bot.on('message', async (msg) => {
 
     // User: get address
     case 'get_address':
-      session.data.address = text;
-      session.state = 'get_description';
+      await setSession(chatId, 'get_description', { ...session.data, address: text });
       bot.sendMessage(chatId,
         `💬 Décrivez brièvement votre problème:\n(Ex: "Mon frigo ne refroidit plus depuis hier")`,
         { parse_mode: 'Markdown' }
@@ -455,8 +478,7 @@ bot.on('message', async (msg) => {
 
     // User: get description → find providers
     case 'get_description':
-      session.data.description = text;
-      session.state = 'waiting';
+      await setSession(chatId, 'waiting', { ...session.data, description: text });
 
       await bot.sendMessage(chatId, '🔍 Recherche du meilleur prestataire disponible...');
 
@@ -541,15 +563,14 @@ bot.on('message', async (msg) => {
     case 'provider_new_or_existing':
       if (text === '1') {
         // Existing — ask for phone to link account
-        session.state = 'provider_link';
+        await setSession(chatId, 'provider_link', {});
         bot.sendMessage(chatId,
           `📱 Entrez le numéro WhatsApp utilisé lors de votre inscription:\n(Ex: +221771234567)`,
           { parse_mode: 'Markdown' }
         );
       } else if (text === '2') {
         // New — full registration
-        session.state = 'provider_register';
-        session.data.step = 'first_name';
+        await setSession(chatId, 'provider_register', { step: 'first_name' });
         bot.sendMessage(chatId,
           `👷 *Inscription prestataire Vitfe*\n\nPour commencer, quel est votre *prénom*?`,
           { parse_mode: 'Markdown' }
@@ -599,7 +620,7 @@ bot.on('message', async (msg) => {
 
     // Provider registration flow
     case 'provider_register':
-      await handleProviderRegistration(chatId, text, session, bot);
+      await handleProviderRegistration(chatId, text, session, setSession, clearSession, bot);
       break;
 
     default:
@@ -616,22 +637,19 @@ bot.on('message', async (msg) => {
 // PROVIDER REGISTRATION
 // ─────────────────────────────────────────
 
-async function handleProviderRegistration(chatId, text, session, bot) {
+async function handleProviderRegistration(chatId, text, session, setSession, clearSession, bot) {
   const step = session.data.step;
 
   if (step === 'first_name') {
-    session.data.first_name = text;
-    session.data.step = 'last_name';
+    await setSession(chatId, 'provider_register', { ...session.data, first_name: text, step: 'last_name' });
     bot.sendMessage(chatId, `Votre *nom de famille*?`, { parse_mode: 'Markdown' });
 
   } else if (step === 'last_name') {
-    session.data.last_name = text;
-    session.data.step = 'phone';
+    await setSession(chatId, 'provider_register', { ...session.data, last_name: text, step: 'phone' });
     bot.sendMessage(chatId, `Votre *numéro WhatsApp*? (Ex: +221771234567)`, { parse_mode: 'Markdown' });
 
   } else if (step === 'phone') {
-    session.data.phone = text;
-    session.data.step = 'category';
+    await setSession(chatId, 'provider_register', { ...session.data, phone: text, step: 'category' });
     bot.sendMessage(chatId,
       `Votre *métier*?\n\n${categoryMenu()}\n\nRépondez avec le numéro.`,
       { parse_mode: 'Markdown' }
@@ -641,13 +659,11 @@ async function handleProviderRegistration(chatId, text, session, bot) {
     if (!CATEGORIES[text]) {
       return bot.sendMessage(chatId, 'Veuillez choisir un numéro valide.');
     }
-    session.data.category = CATEGORIES[text];
-    session.data.step = 'address';
+    await setSession(chatId, 'provider_register', { ...session.data, category: CATEGORIES[text], step: 'address' });
     bot.sendMessage(chatId, `Votre *adresse* à Dakar?`, { parse_mode: 'Markdown' });
 
   } else if (step === 'address') {
-    session.data.address = text;
-    session.data.step = 'password';
+    await setSession(chatId, 'provider_register', { ...session.data, address: text, step: 'password' });
     bot.sendMessage(chatId,
       `Créez un *mot de passe* pour votre tableau de bord Vitfe.\n(Minimum 6 caractères)`,
       { parse_mode: 'Markdown' }
@@ -657,7 +673,7 @@ async function handleProviderRegistration(chatId, text, session, bot) {
     if (text.length < 6) {
       return bot.sendMessage(chatId, '❌ Mot de passe trop court. Minimum 6 caractères.');
     }
-    session.data.password = text;
+    await setSession(chatId, 'provider_register', { ...session.data, password: text, step: 'password' });
 
     // Save provider to database
     const { data, error } = await supabase
