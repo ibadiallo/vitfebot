@@ -165,6 +165,85 @@ async function getProviderByTelegramId(chatId) {
   return data;
 }
 
+// ─────────────────────────────────────────
+// MONTHLY CHECK-IN — "are you still available?"
+// ─────────────────────────────────────────
+
+async function sendMonthlyCheckIns() {
+  // Find providers who were checked in more than 30 days ago (or never)
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const { data: providers, error } = await supabase
+    .from('providers')
+    .select('*')
+    .eq('is_verified', true)
+    .or(`last_checkin.is.null,last_checkin.lt.${thirtyDaysAgo.toISOString()}`);
+
+  if (error || !providers) return;
+
+  for (const provider of providers) {
+    if (!provider.telegram_chat_id) continue;
+
+    try {
+      await bot.sendMessage(provider.telegram_chat_id,
+        `👋 *Bonjour ${provider.first_name}!*\n\n` +
+        `Êtes-vous toujours disponible pour des missions ce mois-ci?\n\n` +
+        `Répondez *OUI* pour rester visible dans les résultats Vitfe.\n\n` +
+        `⏱️ Sans réponse sous 48h, votre profil sera temporairement masqué jusqu'à votre prochaine confirmation.`,
+        { parse_mode: 'Markdown' }
+      );
+
+      // Mark checkin as sent, start the 48h countdown
+      await supabase
+        .from('providers')
+        .update({ checkin_sent_at: new Date() })
+        .eq('id', provider.id);
+
+    } catch (e) {
+      console.error(`Failed to send check-in to provider ${provider.id}:`, e.message);
+    }
+  }
+
+  console.log(`📋 Monthly check-in sent to ${providers.length} provider(s).`);
+}
+
+async function hideUnresponsiveProviders() {
+  // Providers who got a check-in 48h+ ago and never confirmed
+  const fortyEightHoursAgo = new Date();
+  fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
+
+  const { data: providers, error } = await supabase
+    .from('providers')
+    .select('id, first_name, checkin_sent_at, last_checkin')
+    .not('checkin_sent_at', 'is', null)
+    .lt('checkin_sent_at', fortyEightHoursAgo.toISOString());
+
+  if (error || !providers) return;
+
+  for (const provider of providers) {
+    // Only hide if they haven't confirmed since the check-in was sent
+    const confirmedAfterCheckin = provider.last_checkin &&
+      new Date(provider.last_checkin) > new Date(provider.checkin_sent_at);
+
+    if (!confirmedAfterCheckin) {
+      await supabase
+        .from('providers')
+        .update({ is_available: false })
+        .eq('id', provider.id);
+      console.log(`⏸️ Provider ${provider.first_name} (${provider.id}) auto-hidden — no check-in response.`);
+    }
+  }
+}
+
+// Run check-ins once a day — function decides internally if 30 days have passed per provider
+setInterval(sendMonthlyCheckIns, 24 * 60 * 60 * 1000); // every 24h
+setInterval(hideUnresponsiveProviders, 60 * 60 * 1000); // every 1h, catches the 48h cutoff promptly
+
+// Run once shortly after bot starts (in case Render restarted mid-cycle)
+setTimeout(sendMonthlyCheckIns, 60 * 1000);
+setTimeout(hideUnresponsiveProviders, 90 * 1000);
+
 async function saveRating(requestId, providerId, userPhone, score, comment) {
   const { error } = await supabase
     .from('ratings')
@@ -293,6 +372,22 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/')) return;
 
   const session = await getSession(chatId);
+
+  // ── Handle monthly check-in confirmation ──
+  if (text.toUpperCase() === 'OUI' && !session?.state) {
+    const provider = await getProviderByTelegramId(chatId);
+    if (provider) {
+      await supabase
+        .from('providers')
+        .update({ last_checkin: new Date(), is_available: true })
+        .eq('id', provider.id);
+
+      return bot.sendMessage(chatId,
+        `✅ *Merci!* Vous restez visible dans les résultats Vitfe ce mois-ci. 🙌`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+  }
 
   // ── Handle provider accepting/declining requests ──
   if (text.startsWith('OUI_') || text.startsWith('NON_')) {
