@@ -4,7 +4,25 @@ const { createClient } = require('@supabase/supabase-js');
 const express = require('express');
 
 // Initialize
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { 
+  polling: {
+    autoStart: true,
+    params: { timeout: 10 }
+  }
+});
+
+// Clean shutdown — prevents 409 conflicts on Render redeploy
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received — stopping bot polling...');
+  bot.stopPolling().then(() => {
+    console.log('Bot polling stopped cleanly.');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  bot.stopPolling().then(() => process.exit(0));
+});
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const app = express();
 
@@ -369,7 +387,7 @@ bot.on('message', async (msg) => {
   const session = await getSession(chatId);
   const lang = session.lang || 'fr';
 
-  // ── Monthly check-in OUI confirmation ──
+  console.log(`[DEBUG] chatId:${chatId} state:${session.state} lang:${lang} text:${text}`);
   if (text.toUpperCase() === 'OUI' && session.state !== 'waiting') {
     const provider = await getProviderByTelegramId(chatId);
     if (provider) {
