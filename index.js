@@ -464,10 +464,10 @@ bot.on('message', async (msg) => {
     // Language picker
     case 'pick_lang':
       if (text === '1') {
-        await setLang(chatId, 'fr');
+        await setSession(chatId, 'main_menu', {}, 'fr');
         bot.sendMessage(chatId, t('fr', 'main_menu'), { parse_mode: 'Markdown' });
       } else if (text === '2') {
-        await setLang(chatId, 'en');
+        await setSession(chatId, 'main_menu', {}, 'en');
         bot.sendMessage(chatId, t('en', 'main_menu'), { parse_mode: 'Markdown' });
       } else {
         bot.sendMessage(chatId, t('fr', 'welcome_lang'), { parse_mode: 'Markdown' });
