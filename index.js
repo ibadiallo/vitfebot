@@ -324,8 +324,8 @@ setTimeout(hideUnresponsiveProviders, 90 * 1000);
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   await clearSession(chatId);
-  await bot.sendMessage(chatId, t('fr', 'welcome_lang'), { parse_mode: 'Markdown' });
   await setSession(chatId, 'pick_lang', {});
+  await bot.sendMessage(chatId, t('fr', 'welcome_lang'), { parse_mode: 'Markdown' });
 });
 
 bot.onText(/\/dispo/, async (msg) => {
@@ -481,6 +481,7 @@ bot.on('message', async (msg) => {
 
     // Language picker
     case 'pick_lang':
+    case 'idle':
       if (text === '1') {
         await setSession(chatId, 'main_menu', {}, 'fr');
         bot.sendMessage(chatId, t('fr', 'main_menu'), { parse_mode: 'Markdown' });
