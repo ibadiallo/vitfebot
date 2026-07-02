@@ -166,48 +166,25 @@ function categoryMenu() {
 }
 
 // ─────────────────────────────────────────
-// SESSION MANAGEMENT (Supabase)
+// SESSION MANAGEMENT (In-Memory)
 // ─────────────────────────────────────────
 
 const requestTimeouts = {};
+const memorySessions = {};
 
 async function getSession(chatId) {
-  try {
-    const { data } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('chat_id', String(chatId))
-      .single();
-    if (data) return { state: data.state, data: data.session_data || {}, lang: data.lang || 'fr' };
-  } catch (e) {}
-  return { state: 'idle', data: {}, lang: 'fr' };
+  return memorySessions[String(chatId)] || { state: 'idle', data: {}, lang: 'fr' };
 }
 
 async function setSession(chatId, state, sessionData = {}, lang = null) {
-  // First get existing lang if not provided
-  let finalLang = lang;
-  if (!finalLang) {
-    try {
-      const { data } = await supabase.from('sessions').select('lang').eq('chat_id', String(chatId)).single();
-      finalLang = data?.lang || 'fr';
-    } catch (e) {
-      finalLang = 'fr';
-    }
-  }
-  await supabase.from('sessions').upsert(
-    [{ chat_id: String(chatId), state, session_data: sessionData, lang: finalLang, updated_at: new Date() }],
-    { onConflict: 'chat_id' }
-  );
-}
-
-async function setLang(chatId, lang) {
-  await supabase
-    .from('sessions')
-    .upsert([{ chat_id: String(chatId), lang, state: 'main_menu', session_data: {}, updated_at: new Date() }], { onConflict: 'chat_id' });
+  const existing = memorySessions[String(chatId)] || { lang: 'fr' };
+  const finalLang = lang || existing.lang || 'fr';
+  memorySessions[String(chatId)] = { state, data: sessionData, lang: finalLang };
+  console.log(`[SESSION] chatId:${chatId} state:${state} lang:${finalLang}`);
 }
 
 async function clearSession(chatId) {
-  await supabase.from('sessions').delete().eq('chat_id', String(chatId));
+  delete memorySessions[String(chatId)];
 }
 
 function setRequestTimeout(chatId, requestId, lang) {
@@ -665,3 +642,12 @@ async function handleProviderRegistration(chatId, text, session, lang) {
 }
 
 console.log('🚀 Vitfe bot is running...');
+
+// Test Supabase connection on startup
+(async () => {
+  const { data, error } = await supabase
+    .from('sessions')
+    .upsert([{ chat_id: 'startup_test', state: 'test', session_data: {}, lang: 'fr', updated_at: new Date() }], { onConflict: 'chat_id' });
+  if (error) console.error('❌ Supabase connection FAILED:', JSON.stringify(error));
+  else console.log('✅ Supabase connection OK');
+})();
