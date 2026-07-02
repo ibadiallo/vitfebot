@@ -8,11 +8,127 @@ const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const app = express();
 
-// Keep server alive on Render
 app.get('/', (req, res) => res.send('Vitfe bot is running! 🚀'));
 app.listen(process.env.PORT || 3000);
 
-// Categories
+// ─────────────────────────────────────────
+// TRANSLATIONS
+// ─────────────────────────────────────────
+
+const MSG = {
+  fr: {
+    welcome_lang: `👋 *Bienvenue sur Vitfe!*\n\nChoisissez votre langue / Choose your language:\n\n1️⃣ Français\n2️⃣ English`,
+    main_menu: `👋 *Bienvenue sur Vitfe!*\n\nVitfe connecte instantanément les clients aux meilleurs prestataires de services à Dakar.\n\nQue souhaitez-vous faire?\n\n1️⃣ J'ai besoin d'un service\n2️⃣ Je suis prestataire\n\nRépondez avec le numéro de votre choix.`,
+    pick_category: `🔍 *Quel service recherchez-vous?*\n\n{categories}\n\nRépondez avec le numéro.`,
+    ask_address: `📍 *{category}*\n\nQuelle est votre adresse à Dakar?\n(Ex: Plateau, Rue 10, près du marché)`,
+    ask_description: `💬 Décrivez brièvement votre problème:\n(Ex: "Mon frigo ne refroidit plus depuis hier")`,
+    searching: `🔍 Recherche du meilleur prestataire disponible...`,
+    no_provider: `😔 *Aucun prestataire disponible pour le moment.*\n\nRéessayez dans 1 heure ou contactez-nous:\n📞 *+221777527465*\n\nTapez /start pour une nouvelle demande.`,
+    request_sent: `✅ *Demande envoyée!*\n\nNous avons notifié *{count} prestataire(s)* disponible(s).\nVous serez contacté(e) très bientôt.\n\n⏱️ Si personne ne répond dans 5 minutes, nous vous préviendrons.\n\n📞 Support: +221777527465`,
+    timeout: `😔 *Aucun prestataire disponible pour le moment.*\n\nTous nos prestataires sont occupés. Réessayez dans 1 heure ou contactez-nous:\n📞 *+221777527465*\n\nTapez /start pour une nouvelle demande.`,
+    provider_notify: `🔔 *Nouvelle demande Vitfe!*\n\n📋 Service: {category}\n📍 Adresse: {address}\n💬 Détails: {description}\n\nVoulez-vous accepter cette demande?\nRépondez *OUI_{id}* pour accepter\nRépondez *NON_{id}* pour décliner`,
+    provider_accepted_notify: `✅ *Bonne nouvelle!*\n\n{name} a accepté votre demande!\n📞 Contact: {phone}\n⭐ Note: {rating}\n\nIl/elle arrive bientôt. Bonne chance! 🙏`,
+    provider_accepted: `✅ *Demande acceptée!*\n\n📞 Contactez le client: {phone}\n📍 Adresse: {address}\n\nUne fois le travail terminé, tapez:\n*TERMINE_{id}*`,
+    already_taken: `❌ *Désolé, cette demande a déjà été acceptée par un autre prestataire.*\n\nVous recevrez la prochaine! 💪`,
+    declined: `👍 Demande déclinée. Vous recevrez la prochaine.`,
+    job_done: `✅ Parfait! Travail marqué comme terminé. Vous êtes de nouveau disponible.`,
+    rate_provider: `🌟 *Évaluez votre prestataire*\n\nComment était votre expérience avec {name}?\n\n1️⃣ ⭐ Très mauvais\n2️⃣ ⭐⭐ Mauvais\n3️⃣ ⭐⭐⭐ Correct\n4️⃣ ⭐⭐⭐⭐ Bien\n5️⃣ ⭐⭐⭐⭐⭐ Excellent`,
+    rate_invalid: `Veuillez répondre avec un chiffre entre 1 et 5.`,
+    ask_comment: `Voulez-vous laisser un commentaire? (Tapez votre commentaire ou *IGNORER*)`,
+    rating_thanks: `⭐ *Merci pour votre avis!*\n\nVotre évaluation aide la communauté Vitfe.\n\nTapez /start pour une nouvelle demande.`,
+    provider_space: `👷 *Espace Prestataire Vitfe*\n\nÊtes-vous déjà inscrit sur vitfe.vercel.app?\n\n1️⃣ Oui, j'ai déjà un compte\n2️⃣ Non, je veux m'inscrire`,
+    ask_phone_link: `📱 Entrez le numéro WhatsApp utilisé lors de votre inscription:\n(Ex: +221771234567)`,
+    account_not_found: `❌ Aucun compte trouvé avec ce numéro.\n\nVérifiez le numéro ou tapez /start pour vous inscrire.`,
+    account_linked: `✅ *Compte lié avec succès!*\n\nBienvenue {name}! 🎉\n\n{verified}\n\n*Commandes utiles:*\n/dispo — Activer/désactiver disponibilité\n/stats — Voir vos statistiques\n/aide — Aide`,
+    verified_yes: `✅ Votre compte est vérifié. Vous recevrez les demandes de clients!`,
+    verified_no: `⏳ Votre CNI est en cours de vérification.\nEnvoyez votre CNI à +221777527465 sur WhatsApp si ce n'est pas encore fait.`,
+    register_start: `👷 *Inscription prestataire Vitfe*\n\nPour commencer, quel est votre *prénom*?`,
+    ask_lastname: `Votre *nom de famille*?`,
+    ask_phone: `Votre *numéro WhatsApp*? (Ex: +221771234567)`,
+    ask_job: `Votre *métier*?\n\n{categories}\n\nRépondez avec le numéro.`,
+    ask_address_provider: `Votre *adresse* à Dakar?`,
+    ask_password: `Créez un *mot de passe* pour votre tableau de bord Vitfe.\n(Minimum 6 caractères)`,
+    password_short: `❌ Mot de passe trop court. Minimum 6 caractères.`,
+    already_registered: `❌ Ce numéro est déjà enregistré sur Vitfe.`,
+    register_error: `❌ Erreur lors de l'inscription. Réessayez avec /start.`,
+    register_success: `🎉 *Bienvenue sur Vitfe, {name}!*\n\n✅ Votre compte a été créé.\n⏳ En attente de vérification CNI.\n\n*Prochaine étape:*\nEnvoyez une photo de votre CNI recto-verso à:\n📞 +221777527465 sur WhatsApp\n\nUne fois vérifié, vous recevrez les demandes de clients!\n\n*Commandes utiles:*\n/dispo — Activer/désactiver disponibilité\n/stats — Voir vos statistiques\n/aide — Aide`,
+    not_provider: `❌ Vous n'êtes pas enregistré comme prestataire. Tapez /start pour commencer.`,
+    now_available: `✅ Vous êtes maintenant *disponible*. Vous recevrez les nouvelles demandes.`,
+    now_unavailable: `⏸️ Vous êtes maintenant *indisponible*. Vous ne recevrez pas de demandes.`,
+    stats: `📊 *Vos statistiques Vitfe*\n\n👤 {name}\n🔧 {category}\n📍 {city}\n🟢 Disponible: {available}\n✅ Vérifié: {verified}\n\n📈 *Ce mois-ci:*\n🔔 Demandes reçues: {requests}\n✅ Acceptées: {accepted}\n⭐ Note moyenne: {rating}\n🗳️ Nombre d'avis: {total_ratings}`,
+    stats_reviews: `\n\n⭐ *Derniers avis:*\n{reviews}`,
+    yes_label: `Oui`,
+    no_label: `Non`,
+    help: `ℹ️ *Commandes Vitfe:*\n\n/start — Recommencer\n/dispo — Activer/désactiver disponibilité (prestataires)\n/stats — Voir vos statistiques (prestataires)\n/aide — Afficher cette aide\n\n📞 *Support:* +221777527465`,
+    invalid_choice: `Veuillez répondre avec *1* ou *2*.`,
+    invalid_category: `Veuillez choisir un numéro valide.`,
+    fallback: `👋 Tapez /start pour commencer.\n\nBesoin d'aide? Contactez-nous:\n📞 +221777527465`,
+    checkin: `👋 *Bonjour {name}!*\n\nÊtes-vous toujours disponible pour des missions ce mois-ci?\n\nRépondez *OUI* pour rester visible dans les résultats Vitfe.\n\n⏱️ Sans réponse sous 48h, votre profil sera temporairement masqué jusqu'à votre prochaine confirmation.`,
+    checkin_confirmed: `✅ *Merci!* Vous restez visible dans les résultats Vitfe ce mois-ci. 🙌`,
+  },
+  en: {
+    welcome_lang: `👋 *Welcome to Vitfe!*\n\nChoose your language / Choisissez votre langue:\n\n1️⃣ Français\n2️⃣ English`,
+    main_menu: `👋 *Welcome to Vitfe!*\n\nVitfe instantly connects clients with the best service providers in Dakar.\n\nWhat would you like to do?\n\n1️⃣ I need a service\n2️⃣ I am a provider\n\nReply with the number of your choice.`,
+    pick_category: `🔍 *What service are you looking for?*\n\n{categories}\n\nReply with the number.`,
+    ask_address: `📍 *{category}*\n\nWhat is your address in Dakar?\n(Ex: Plateau, Street 10, near the market)`,
+    ask_description: `💬 Briefly describe your problem:\n(Ex: "My fridge stopped cooling since yesterday")`,
+    searching: `🔍 Searching for the best available provider...`,
+    no_provider: `😔 *No provider available at the moment.*\n\nTry again in 1 hour or contact us:\n📞 *+221777527465*\n\nType /start for a new request.`,
+    request_sent: `✅ *Request sent!*\n\nWe notified *{count} available provider(s)*.\nYou will be contacted very soon.\n\n⏱️ If nobody responds within 5 minutes, we will let you know.\n\n📞 Support: +221777527465`,
+    timeout: `😔 *No provider available at the moment.*\n\nAll our providers are busy. Try again in 1 hour or contact us:\n📞 *+221777527465*\n\nType /start for a new request.`,
+    provider_notify: `🔔 *New Vitfe Request!*\n\n📋 Service: {category}\n📍 Address: {address}\n💬 Details: {description}\n\nDo you want to accept this request?\nReply *OUI_{id}* to accept\nReply *NON_{id}* to decline`,
+    provider_accepted_notify: `✅ *Good news!*\n\n{name} accepted your request!\n📞 Contact: {phone}\n⭐ Rating: {rating}\n\nThey are on their way. Good luck! 🙏`,
+    provider_accepted: `✅ *Request accepted!*\n\n📞 Contact the client: {phone}\n📍 Address: {address}\n\nOnce the job is done, type:\n*TERMINE_{id}*`,
+    already_taken: `❌ *Sorry, this request has already been accepted by another provider.*\n\nYou will get the next one! 💪`,
+    declined: `👍 Request declined. You will get the next one.`,
+    job_done: `✅ Great! Job marked as complete. You are available again.`,
+    rate_provider: `🌟 *Rate your provider*\n\nHow was your experience with {name}?\n\n1️⃣ ⭐ Very bad\n2️⃣ ⭐⭐ Bad\n3️⃣ ⭐⭐⭐ OK\n4️⃣ ⭐⭐⭐⭐ Good\n5️⃣ ⭐⭐⭐⭐⭐ Excellent`,
+    rate_invalid: `Please reply with a number between 1 and 5.`,
+    ask_comment: `Would you like to leave a comment? (Type your comment or *SKIP*)`,
+    rating_thanks: `⭐ *Thank you for your review!*\n\nYour rating helps the Vitfe community.\n\nType /start for a new request.`,
+    provider_space: `👷 *Vitfe Provider Area*\n\nAre you already registered on vitfe.vercel.app?\n\n1️⃣ Yes, I already have an account\n2️⃣ No, I want to register`,
+    ask_phone_link: `📱 Enter the WhatsApp number used when you signed up:\n(Ex: +221771234567)`,
+    account_not_found: `❌ No account found with this number.\n\nCheck the number or type /start to register.`,
+    account_linked: `✅ *Account linked successfully!*\n\nWelcome {name}! 🎉\n\n{verified}\n\n*Useful commands:*\n/dispo — Toggle availability\n/stats — View your stats\n/aide — Help`,
+    verified_yes: `✅ Your account is verified. You will receive client requests!`,
+    verified_no: `⏳ Your ID is being verified.\nSend your ID to +221777527465 on WhatsApp if you haven't done so yet.`,
+    register_start: `👷 *Vitfe Provider Registration*\n\nLet's start — what is your *first name*?`,
+    ask_lastname: `Your *last name*?`,
+    ask_phone: `Your *WhatsApp number*? (Ex: +221771234567)`,
+    ask_job: `Your *profession*?\n\n{categories}\n\nReply with the number.`,
+    ask_address_provider: `Your *address* in Dakar?`,
+    ask_password: `Create a *password* for your Vitfe dashboard.\n(Minimum 6 characters)`,
+    password_short: `❌ Password too short. Minimum 6 characters.`,
+    already_registered: `❌ This number is already registered on Vitfe.`,
+    register_error: `❌ Registration error. Try again with /start.`,
+    register_success: `🎉 *Welcome to Vitfe, {name}!*\n\n✅ Your account has been created.\n⏳ Waiting for ID verification.\n\n*Next step:*\nSend a photo of your ID (front and back) to:\n📞 +221777527465 on WhatsApp\n\nOnce verified, you will receive client requests!\n\n*Useful commands:*\n/dispo — Toggle availability\n/stats — View your stats\n/aide — Help`,
+    not_provider: `❌ You are not registered as a provider. Type /start to begin.`,
+    now_available: `✅ You are now *available*. You will receive new requests.`,
+    now_unavailable: `⏸️ You are now *unavailable*. You will not receive requests.`,
+    stats: `📊 *Your Vitfe Stats*\n\n👤 {name}\n🔧 {category}\n📍 {city}\n🟢 Available: {available}\n✅ Verified: {verified}\n\n📈 *This month:*\n🔔 Requests received: {requests}\n✅ Accepted: {accepted}\n⭐ Average rating: {rating}\n🗳️ Number of reviews: {total_ratings}`,
+    stats_reviews: `\n\n⭐ *Latest reviews:*\n{reviews}`,
+    yes_label: `Yes`,
+    no_label: `No`,
+    help: `ℹ️ *Vitfe Commands:*\n\n/start — Restart\n/dispo — Toggle availability (providers)\n/stats — View your stats (providers)\n/aide — Show this help\n\n📞 *Support:* +221777527465`,
+    invalid_choice: `Please reply with *1* or *2*.`,
+    invalid_category: `Please choose a valid number.`,
+    fallback: `👋 Type /start to begin.\n\nNeed help? Contact us:\n📞 +221777527465`,
+    checkin: `👋 *Hello {name}!*\n\nAre you still available for jobs this month?\n\nReply *OUI* to stay visible in Vitfe results.\n\n⏱️ Without a response within 48h, your profile will be temporarily hidden until your next confirmation.`,
+    checkin_confirmed: `✅ *Thank you!* You remain visible in Vitfe results this month. 🙌`,
+  }
+};
+
+// Translation helper — replaces {placeholders} with values
+function t(lang, key, vars = {}) {
+  const l = lang || 'fr';
+  let msg = MSG[l][key] || MSG['fr'][key] || key;
+  Object.entries(vars).forEach(([k, v]) => {
+    msg = msg.replace(new RegExp(`\\{${k}\\}`, 'g'), v);
+  });
+  return msg;
+}
+
+// Categories — same in both languages (with emojis)
 const CATEGORIES = {
   '1': '🔧 Mécanicien',
   '2': '❄️ Technicien Frigo/Clim',
@@ -27,12 +143,15 @@ const CATEGORIES = {
   '11': '➕ Autre'
 };
 
-// In-memory fallback for timeouts
-const requestTimeouts = {};
+function categoryMenu() {
+  return Object.entries(CATEGORIES).map(([k, v]) => `${k}. ${v}`).join('\n');
+}
 
 // ─────────────────────────────────────────
 // SESSION MANAGEMENT (Supabase)
 // ─────────────────────────────────────────
+
+const requestTimeouts = {};
 
 async function getSession(chatId) {
   try {
@@ -41,80 +160,49 @@ async function getSession(chatId) {
       .select('*')
       .eq('chat_id', String(chatId))
       .single();
-    if (data) return { state: data.state, data: data.session_data || {} };
+    if (data) return { state: data.state, data: data.session_data || {}, lang: data.lang || 'fr' };
   } catch (e) {}
-  return { state: 'idle', data: {} };
+  return { state: 'idle', data: {}, lang: 'fr' };
 }
 
-async function setSession(chatId, state, sessionData = {}) {
+async function setSession(chatId, state, sessionData = {}, lang = null) {
+  const upsertData = { chat_id: String(chatId), state, session_data: sessionData, updated_at: new Date() };
+  if (lang) upsertData.lang = lang;
+  await supabase.from('sessions').upsert([upsertData], { onConflict: 'chat_id' });
+}
+
+async function setLang(chatId, lang) {
   await supabase
     .from('sessions')
-    .upsert([{ chat_id: String(chatId), state, session_data: sessionData, updated_at: new Date() }], { onConflict: 'chat_id' });
+    .upsert([{ chat_id: String(chatId), lang, state: 'main_menu', session_data: {}, updated_at: new Date() }], { onConflict: 'chat_id' });
 }
 
 async function clearSession(chatId) {
-  await supabase
-    .from('sessions')
-    .delete()
-    .eq('chat_id', String(chatId));
+  await supabase.from('sessions').delete().eq('chat_id', String(chatId));
 }
 
-function setRequestTimeout(chatId, requestId) {
-  // Clear any existing timeout
+function setRequestTimeout(chatId, requestId, lang) {
   if (requestTimeouts[chatId]) clearTimeout(requestTimeouts[chatId]);
-
   requestTimeouts[chatId] = setTimeout(async () => {
-    // Check if request is still pending
-    const { data: request } = await supabase
-      .from('requests')
-      .select('status')
-      .eq('id', requestId)
-      .single();
-
+    const { data: request } = await supabase.from('requests').select('status').eq('id', requestId).single();
     if (request && request.status === 'pending') {
-      // Update request to expired
-      await supabase
-        .from('requests')
-        .update({ status: 'expired' })
-        .eq('id', requestId);
-
-      // Notify user
-      bot.sendMessage(chatId,
-        `😔 *Aucun prestataire disponible pour le moment.*\n\n` +
-        `Tous nos prestataires sont occupés. Réessayez dans 1 heure ou contactez-nous directement:\n` +
-        `📞 *+221777527465*\n\n` +
-        `Tapez /start pour une nouvelle demande.`,
-        { parse_mode: 'Markdown' }
-      );
-
+      await supabase.from('requests').update({ status: 'expired' }).eq('id', requestId);
+      bot.sendMessage(chatId, t(lang, 'timeout'), { parse_mode: 'Markdown' });
       clearSession(chatId);
     }
-
     delete requestTimeouts[chatId];
-  }, 5 * 60 * 1000); // 5 minutes
+  }, 5 * 60 * 1000);
 }
 
 // ─────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────
 
-
-
-function categoryMenu() {
-  return Object.entries(CATEGORIES)
-    .map(([k, v]) => `${k}. ${v}`)
-    .join('\n');
-}
-
 async function findAvailableProviders(category) {
   const { data, error } = await supabase
-    .from('providers')
-    .select('*')
-    .eq('category', category)
-    .eq('is_available', true)
-    .eq('is_verified', true)
+    .from('providers').select('*')
+    .eq('category', category).eq('is_available', true).eq('is_verified', true)
     .order('rating', { ascending: false });
-
   if (error) console.error('Error finding providers:', error);
   return data || [];
 }
@@ -123,242 +211,150 @@ async function saveRequest(userPhone, category, description, address) {
   const { data, error } = await supabase
     .from('requests')
     .insert([{ user_phone: userPhone, category, description, address, status: 'pending' }])
-    .select()
-    .single();
-
+    .select().single();
   if (error) console.error('Error saving request:', error);
   return data;
 }
 
-async function notifyProviders(providers, request, bot) {
+async function notifyProviders(providers, request, userLang) {
   for (const provider of providers) {
-    if (provider.telegram_chat_id) {
-      await bot.sendMessage(provider.telegram_chat_id,
-        `🔔 *Nouvelle demande Vitfe!*\n\n` +
-        `📋 Service: ${request.category}\n` +
-        `📍 Adresse: ${request.address || 'Non précisé'}\n` +
-        `💬 Détails: ${request.description || 'Aucun détail'}\n\n` +
-        `Voulez-vous accepter cette demande?\n` +
-        `Répondez *OUI_${request.id}* pour accepter\n` +
-        `Répondez *NON_${request.id}* pour décliner`,
-        { parse_mode: 'Markdown' }
-      );
-    }
+    if (!provider.telegram_chat_id) continue;
+    const provLang = 'fr'; // providers always get French for now
+    await bot.sendMessage(provider.telegram_chat_id,
+      t(provLang, 'provider_notify', {
+        category: request.category,
+        address: request.address || (userLang === 'en' ? 'Not specified' : 'Non précisé'),
+        description: request.description || (userLang === 'en' ? 'No details' : 'Aucun détail'),
+        id: request.id
+      }),
+      { parse_mode: 'Markdown' }
+    );
   }
 }
 
 async function updateProviderAvailability(phone, isAvailable) {
-  const { error } = await supabase
-    .from('providers')
-    .update({ is_available: isAvailable, last_active: new Date() })
-    .eq('phone', phone);
-
-  if (error) console.error('Error updating availability:', error);
+  await supabase.from('providers').update({ is_available: isAvailable, last_active: new Date() }).eq('phone', phone);
 }
 
 async function getProviderByTelegramId(chatId) {
-  const { data } = await supabase
-    .from('providers')
-    .select('*')
-    .eq('telegram_chat_id', String(chatId))
-    .single();
+  const { data } = await supabase.from('providers').select('*').eq('telegram_chat_id', String(chatId)).single();
   return data;
 }
 
+async function saveRating(requestId, providerId, userPhone, score, comment) {
+  await supabase.from('ratings').insert([{ request_id: requestId, provider_id: providerId, user_phone: userPhone, score, comment }]);
+  const { data: ratings } = await supabase.from('ratings').select('score').eq('provider_id', providerId);
+  if (ratings && ratings.length > 0) {
+    const avg = ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length;
+    await supabase.from('providers').update({ rating: avg.toFixed(1), total_ratings: ratings.length }).eq('id', providerId);
+  }
+}
+
 // ─────────────────────────────────────────
-// MONTHLY CHECK-IN — "are you still available?"
+// MONTHLY CHECK-IN
 // ─────────────────────────────────────────
 
 async function sendMonthlyCheckIns() {
-  // Find providers who were checked in more than 30 days ago (or never)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
   const { data: providers, error } = await supabase
-    .from('providers')
-    .select('*')
-    .eq('is_verified', true)
+    .from('providers').select('*').eq('is_verified', true)
     .or(`last_checkin.is.null,last_checkin.lt.${thirtyDaysAgo.toISOString()}`);
-
   if (error || !providers) return;
-
   for (const provider of providers) {
     if (!provider.telegram_chat_id) continue;
-
     try {
       await bot.sendMessage(provider.telegram_chat_id,
-        `👋 *Bonjour ${provider.first_name}!*\n\n` +
-        `Êtes-vous toujours disponible pour des missions ce mois-ci?\n\n` +
-        `Répondez *OUI* pour rester visible dans les résultats Vitfe.\n\n` +
-        `⏱️ Sans réponse sous 48h, votre profil sera temporairement masqué jusqu'à votre prochaine confirmation.`,
+        t('fr', 'checkin', { name: provider.first_name }),
         { parse_mode: 'Markdown' }
       );
-
-      // Mark checkin as sent, start the 48h countdown
-      await supabase
-        .from('providers')
-        .update({ checkin_sent_at: new Date() })
-        .eq('id', provider.id);
-
+      await supabase.from('providers').update({ checkin_sent_at: new Date() }).eq('id', provider.id);
     } catch (e) {
-      console.error(`Failed to send check-in to provider ${provider.id}:`, e.message);
+      console.error(`Check-in failed for provider ${provider.id}:`, e.message);
     }
   }
-
   console.log(`📋 Monthly check-in sent to ${providers.length} provider(s).`);
 }
 
 async function hideUnresponsiveProviders() {
-  // Providers who got a check-in 48h+ ago and never confirmed
   const fortyEightHoursAgo = new Date();
   fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
-
   const { data: providers, error } = await supabase
-    .from('providers')
-    .select('id, first_name, checkin_sent_at, last_checkin')
+    .from('providers').select('id, first_name, checkin_sent_at, last_checkin')
     .not('checkin_sent_at', 'is', null)
     .lt('checkin_sent_at', fortyEightHoursAgo.toISOString());
-
   if (error || !providers) return;
-
   for (const provider of providers) {
-    // Only hide if they haven't confirmed since the check-in was sent
     const confirmedAfterCheckin = provider.last_checkin &&
       new Date(provider.last_checkin) > new Date(provider.checkin_sent_at);
-
     if (!confirmedAfterCheckin) {
-      await supabase
-        .from('providers')
-        .update({ is_available: false })
-        .eq('id', provider.id);
-      console.log(`⏸️ Provider ${provider.first_name} (${provider.id}) auto-hidden — no check-in response.`);
+      await supabase.from('providers').update({ is_available: false }).eq('id', provider.id);
+      console.log(`⏸️ Provider ${provider.first_name} auto-hidden — no check-in response.`);
     }
   }
 }
 
-// Run check-ins once a day — function decides internally if 30 days have passed per provider
-setInterval(sendMonthlyCheckIns, 24 * 60 * 60 * 1000); // every 24h
-setInterval(hideUnresponsiveProviders, 60 * 60 * 1000); // every 1h, catches the 48h cutoff promptly
-
-// Run once shortly after bot starts (in case Render restarted mid-cycle)
+setInterval(sendMonthlyCheckIns, 24 * 60 * 60 * 1000);
+setInterval(hideUnresponsiveProviders, 60 * 60 * 1000);
 setTimeout(sendMonthlyCheckIns, 60 * 1000);
 setTimeout(hideUnresponsiveProviders, 90 * 1000);
-
-async function saveRating(requestId, providerId, userPhone, score, comment) {
-  const { error } = await supabase
-    .from('ratings')
-    .insert([{ request_id: requestId, provider_id: providerId, user_phone: userPhone, score, comment }]);
-
-  if (!error) {
-    // Update provider average rating
-    const { data: ratings } = await supabase
-      .from('ratings')
-      .select('score')
-      .eq('provider_id', providerId);
-
-    if (ratings && ratings.length > 0) {
-      const avg = ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length;
-      await supabase
-        .from('providers')
-        .update({ rating: avg.toFixed(1), total_ratings: ratings.length })
-        .eq('id', providerId);
-    }
-  }
-}
 
 // ─────────────────────────────────────────
 // BOT COMMANDS
 // ─────────────────────────────────────────
 
-// /start
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   await clearSession(chatId);
-
-  await bot.sendMessage(chatId,
-    `👋 *Bienvenue sur Vitfe!*\n\n` +
-    `Vitfe connecte instantanément les clients aux meilleurs prestataires de services à Dakar.\n\n` +
-    `Que souhaitez-vous faire?\n\n` +
-    `1️⃣ J'ai besoin d'un service\n` +
-    `2️⃣ Je suis prestataire\n\n` +
-    `Répondez avec le numéro de votre choix.`,
-    { parse_mode: 'Markdown' }
-  );
-
-  await setSession(chatId, 'main_menu', {});
+  await bot.sendMessage(chatId, t('fr', 'welcome_lang'), { parse_mode: 'Markdown' });
+  await setSession(chatId, 'pick_lang', {});
 });
 
-// /dispo — provider toggles availability
 bot.onText(/\/dispo/, async (msg) => {
   const chatId = msg.chat.id;
+  const session = await getSession(chatId);
+  const lang = session.lang || 'fr';
   const provider = await getProviderByTelegramId(chatId);
-
-  if (!provider) {
-    return bot.sendMessage(chatId, '❌ Vous n\'êtes pas enregistré comme prestataire. Tapez /start pour commencer.');
-  }
-
+  if (!provider) return bot.sendMessage(chatId, t(lang, 'not_provider'));
   const newStatus = !provider.is_available;
   await updateProviderAvailability(provider.phone, newStatus);
-
-  bot.sendMessage(chatId,
-    newStatus
-      ? '✅ Vous êtes maintenant *disponible*. Vous recevrez les nouvelles demandes.'
-      : '⏸️ Vous êtes maintenant *indisponible*. Vous ne recevrez pas de demandes.',
-    { parse_mode: 'Markdown' }
-  );
+  bot.sendMessage(chatId, t(lang, newStatus ? 'now_available' : 'now_unavailable'), { parse_mode: 'Markdown' });
 });
 
-// /stats — provider sees their stats
 bot.onText(/\/stats/, async (msg) => {
   const chatId = msg.chat.id;
+  const session = await getSession(chatId);
+  const lang = session.lang || 'fr';
   const provider = await getProviderByTelegramId(chatId);
-
-  if (!provider) {
-    return bot.sendMessage(chatId, '❌ Vous n\'êtes pas enregistré comme prestataire.');
-  }
+  if (!provider) return bot.sendMessage(chatId, t(lang, 'not_provider'));
 
   const { data: ratings } = await supabase
-    .from('ratings')
-    .select('score, comment')
-    .eq('provider_id', provider.id)
-    .order('created_at', { ascending: false })
-    .limit(5);
+    .from('ratings').select('score, comment').eq('provider_id', provider.id)
+    .order('created_at', { ascending: false }).limit(5);
 
-  let reviewsText = '';
+  let statsMsg = t(lang, 'stats', {
+    name: `${provider.first_name} ${provider.last_name}`,
+    category: provider.category,
+    city: provider.city,
+    available: provider.is_available ? (lang === 'en' ? 'Yes' : 'Oui') : (lang === 'en' ? 'No' : 'Non'),
+    verified: provider.is_verified ? (lang === 'en' ? 'Yes' : 'Oui') : (lang === 'en' ? 'No' : 'Non'),
+    requests: provider.total_requests || 0,
+    accepted: provider.total_accepted || 0,
+    rating: provider.rating || (lang === 'en' ? 'Not yet rated' : 'Pas encore noté'),
+    total_ratings: provider.total_ratings || 0
+  });
+
   if (ratings && ratings.length > 0) {
-    reviewsText = '\n\n⭐ *Derniers avis:*\n' + ratings.map(r =>
-      `${'⭐'.repeat(r.score)} ${r.comment || 'Pas de commentaire'}`
-    ).join('\n');
+    const reviewLines = ratings.map(r => `${'⭐'.repeat(r.score)} ${r.comment || (lang === 'en' ? 'No comment' : 'Pas de commentaire')}`).join('\n');
+    statsMsg += t(lang, 'stats_reviews', { reviews: reviewLines });
   }
 
-  bot.sendMessage(chatId,
-    `📊 *Vos statistiques Vitfe*\n\n` +
-    `👤 ${provider.first_name} ${provider.last_name}\n` +
-    `🔧 ${provider.category}\n` +
-    `📍 ${provider.city}\n` +
-    `🟢 Disponible: ${provider.is_available ? 'Oui' : 'Non'}\n` +
-    `✅ Vérifié: ${provider.is_verified ? 'Oui' : 'Non'}\n\n` +
-    `📈 *Ce mois-ci:*\n` +
-    `🔔 Demandes reçues: ${provider.total_requests || 0}\n` +
-    `✅ Acceptées: ${provider.total_accepted || 0}\n` +
-    `⭐ Note moyenne: ${provider.rating || 'Pas encore noté'}/5\n` +
-    `🗳️ Nombre d'avis: ${provider.total_ratings || 0}` +
-    reviewsText,
-    { parse_mode: 'Markdown' }
-  );
+  bot.sendMessage(chatId, statsMsg, { parse_mode: 'Markdown' });
 });
 
-// /aide
 bot.onText(/\/aide/, async (msg) => {
-  bot.sendMessage(msg.chat.id,
-    `ℹ️ *Commandes Vitfe:*\n\n` +
-    `/start — Recommencer\n` +
-    `/dispo — Activer/désactiver disponibilité (prestataires)\n` +
-    `/stats — Voir vos statistiques (prestataires)\n` +
-    `/aide — Afficher cette aide\n\n` +
-    `📞 *Support:* +221777527465`,
-    { parse_mode: 'Markdown' }
-  );
+  const session = await getSession(msg.chat.id);
+  bot.sendMessage(msg.chat.id, t(session.lang || 'fr', 'help'), { parse_mode: 'Markdown' });
 });
 
 // ─────────────────────────────────────────
@@ -368,157 +364,96 @@ bot.onText(/\/aide/, async (msg) => {
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text?.trim();
-
   if (!text || text.startsWith('/')) return;
 
   const session = await getSession(chatId);
+  const lang = session.lang || 'fr';
 
-  // ── Handle monthly check-in confirmation ──
-  if (text.toUpperCase() === 'OUI' && !session?.state) {
+  // ── Monthly check-in OUI confirmation ──
+  if (text.toUpperCase() === 'OUI' && session.state !== 'waiting') {
     const provider = await getProviderByTelegramId(chatId);
     if (provider) {
-      await supabase
-        .from('providers')
-        .update({ last_checkin: new Date(), is_available: true })
-        .eq('id', provider.id);
-
-      return bot.sendMessage(chatId,
-        `✅ *Merci!* Vous restez visible dans les résultats Vitfe ce mois-ci. 🙌`,
-        { parse_mode: 'Markdown' }
-      );
+      await supabase.from('providers').update({ last_checkin: new Date(), is_available: true }).eq('id', provider.id);
+      return bot.sendMessage(chatId, t(lang, 'checkin_confirmed'), { parse_mode: 'Markdown' });
     }
   }
 
-  // ── Handle provider accepting/declining requests ──
+  // ── Provider accepting/declining requests ──
   if (text.startsWith('OUI_') || text.startsWith('NON_')) {
     const parts = text.split('_');
     const action = parts[0];
     const requestId = parts[1];
-
     const provider = await getProviderByTelegramId(chatId);
     if (!provider) return;
 
     if (action === 'OUI') {
-      // FIX 7: Atomic update — only succeeds if status is still 'pending'
-      // This prevents two providers from accepting the same request
       const { data: updatedRequests, error: updateError } = await supabase
         .from('requests')
         .update({ provider_id: provider.id, status: 'accepted', accepted_at: new Date() })
-        .eq('id', requestId)
-        .eq('status', 'pending') // Only update if still pending — first wins
-        .select();
+        .eq('id', requestId).eq('status', 'pending').select();
 
       const request = updatedRequests?.[0];
-
       if (!request || updateError) {
-        return bot.sendMessage(chatId,
-          `❌ *Désolé, cette demande a déjà été acceptée par un autre prestataire.*\n\nVous recevrez la prochaine! 💪`,
-          { parse_mode: 'Markdown' }
-        );
+        return bot.sendMessage(chatId, t(lang, 'already_taken'), { parse_mode: 'Markdown' });
       }
 
-      // Update provider stats
-      await supabase
-        .from('providers')
-        .update({
-          total_accepted: (provider.total_accepted || 0) + 1,
-          is_available: false
-        })
-        .eq('id', provider.id);
+      await supabase.from('providers').update({
+        total_accepted: (provider.total_accepted || 0) + 1,
+        is_available: false
+      }).eq('id', provider.id);
 
-      // Cancel timeout — provider accepted
-      if (requestTimeouts[request.user_phone]) {
-        clearTimeout(requestTimeouts[request.user_phone]);
-        delete requestTimeouts[request.user_phone];
-      }
-      // Also try by chatId match
-      Object.keys(requestTimeouts).forEach(key => {
-        if (sessions[key]?.data?.requestId === request.id) {
-          clearTimeout(requestTimeouts[key]);
-          delete requestTimeouts[key];
-        }
-      });
-
-      // Notify provider
       bot.sendMessage(chatId,
-        `✅ *Demande acceptée!*\n\n` +
-        `📞 Contactez le client: ${request.user_phone}\n` +
-        `📍 Adresse: ${request.address || 'À confirmer avec le client'}\n\n` +
-        `Une fois le travail terminé, tapez:\n*TERMINE_${requestId}*`,
+        t(lang, 'provider_accepted', {
+          phone: request.user_phone,
+          address: request.address || (lang === 'en' ? 'To confirm with client' : 'À confirmer avec le client'),
+          id: requestId
+        }),
         { parse_mode: 'Markdown' }
       );
 
-      // Notify user
-      const userSessions = Object.entries(sessions).find(([id, s]) =>
-        s.data.requestId === requestId
-      );
+      // Notify user — find their session
+      const { data: userSession } = await supabase
+        .from('sessions').select('*').eq('session_data->>requestId', requestId).single().catch(() => ({ data: null }));
 
-      if (userSessions) {
-        const userChatId = userSessions[0];
-        bot.sendMessage(userChatId,
-          `✅ *Bonne nouvelle!*\n\n` +
-          `${provider.first_name} ${provider.last_name} a accepté votre demande!\n` +
-          `📞 Contact: ${provider.phone}\n` +
-          `⭐ Note: ${provider.rating || 'Nouveau'}/5\n\n` +
-          `Il/elle arrive bientôt. Bonne chance! 🙏`,
+      if (userSession) {
+        const userLang = userSession.lang || 'fr';
+        bot.sendMessage(userSession.chat_id,
+          t(userLang, 'provider_accepted_notify', {
+            name: `${provider.first_name} ${provider.last_name}`,
+            phone: provider.phone,
+            rating: provider.rating || (userLang === 'en' ? 'New' : 'Nouveau')
+          }),
           { parse_mode: 'Markdown' }
         );
       }
 
     } else {
-      bot.sendMessage(chatId, '👍 Demande déclinée. Vous recevrez la prochaine.');
+      bot.sendMessage(chatId, t(lang, 'declined'));
     }
     return;
   }
 
-  // ── Handle job completion ──
+  // ── Job completion ──
   if (text.startsWith('TERMINE_')) {
     const requestId = text.split('_')[1];
     const provider = await getProviderByTelegramId(chatId);
     if (!provider) return;
 
-    await supabase
-      .from('requests')
-      .update({ status: 'completed', completed_at: new Date() })
-      .eq('id', requestId);
-
-    await supabase
-      .from('providers')
-      .update({ is_available: true })
-      .eq('id', provider.id);
-
-    bot.sendMessage(chatId, '✅ Parfait! Travail marqué comme terminé. Vous êtes de nouveau disponible.');
+    await supabase.from('requests').update({ status: 'completed', completed_at: new Date() }).eq('id', requestId);
+    await supabase.from('providers').update({ is_available: true }).eq('id', provider.id);
+    bot.sendMessage(chatId, t(lang, 'job_done'));
 
     // Ask user to rate
-    const { data: request } = await supabase
-      .from('requests')
-      .select('*')
-      .eq('id', requestId)
-      .single();
-
+    const { data: request } = await supabase.from('requests').select('*').eq('id', requestId).single();
     if (request) {
-      const userSessions = Object.entries(sessions).find(([id, s]) =>
-        s.data.requestId === requestId
+      const { data: userSession } = await supabase
+        .from('sessions').select('*').eq('chat_id', request.user_phone).single().catch(() => ({ data: null }));
+      const userLang = userSession?.lang || 'fr';
+      await setSession(request.user_phone, 'rating', { requestId, providerId: provider.id, providerName: `${provider.first_name} ${provider.last_name}` }, userLang);
+      bot.sendMessage(request.user_phone,
+        t(userLang, 'rate_provider', { name: `${provider.first_name} ${provider.last_name}` }),
+        { parse_mode: 'Markdown' }
       );
-
-      if (userSessions) {
-        const userChatId = userSessions[0];
-        sessions[userChatId] = {
-          state: 'rating',
-          data: { requestId, providerId: provider.id, providerName: `${provider.first_name} ${provider.last_name}` }
-        };
-
-        bot.sendMessage(userChatId,
-          `🌟 *Évaluez votre prestataire*\n\n` +
-          `Comment était votre expérience avec ${provider.first_name} ${provider.last_name}?\n\n` +
-          `1️⃣ ⭐ Très mauvais\n` +
-          `2️⃣ ⭐⭐ Mauvais\n` +
-          `3️⃣ ⭐⭐⭐ Correct\n` +
-          `4️⃣ ⭐⭐⭐⭐ Bien\n` +
-          `5️⃣ ⭐⭐⭐⭐⭐ Excellent`,
-          { parse_mode: 'Markdown' }
-        );
-      }
     }
     return;
   }
@@ -526,205 +461,121 @@ bot.on('message', async (msg) => {
   // ── STATE MACHINE ──
   switch (session.state) {
 
-    // Main menu
+    // Language picker
+    case 'pick_lang':
+      if (text === '1') {
+        await setLang(chatId, 'fr');
+        bot.sendMessage(chatId, t('fr', 'main_menu'), { parse_mode: 'Markdown' });
+      } else if (text === '2') {
+        await setLang(chatId, 'en');
+        bot.sendMessage(chatId, t('en', 'main_menu'), { parse_mode: 'Markdown' });
+      } else {
+        bot.sendMessage(chatId, t('fr', 'welcome_lang'), { parse_mode: 'Markdown' });
+      }
+      break;
+
     case 'main_menu':
       if (text === '1') {
-        session.state = 'select_category';
-        await setSession(chatId, 'select_category', {});
-        bot.sendMessage(chatId,
-          `🔍 *Quel service recherchez-vous?*\n\n${categoryMenu()}\n\nRépondez avec le numéro.`,
-          { parse_mode: 'Markdown' }
-        );
+        await setSession(chatId, 'select_category', {}, lang);
+        bot.sendMessage(chatId, t(lang, 'pick_category', { categories: categoryMenu() }), { parse_mode: 'Markdown' });
       } else if (text === '2') {
-        await setSession(chatId, 'provider_new_or_existing', {});
-        bot.sendMessage(chatId,
-          `👷 *Espace Prestataire Vitfe*\n\n` +
-          `Êtes-vous déjà inscrit sur vitfe.vercel.app?\n\n` +
-          `1️⃣ Oui, j'ai déjà un compte\n` +
-          `2️⃣ Non, je veux m'inscrire`,
-          { parse_mode: 'Markdown' }
-        );
+        await setSession(chatId, 'provider_new_or_existing', {}, lang);
+        bot.sendMessage(chatId, t(lang, 'provider_space'), { parse_mode: 'Markdown' });
       } else {
-        bot.sendMessage(chatId, 'Veuillez répondre avec *1* ou *2*.', { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, t(lang, 'invalid_choice'), { parse_mode: 'Markdown' });
       }
       break;
 
-    // User: select category
     case 'select_category':
       if (CATEGORIES[text]) {
-        await setSession(chatId, 'get_address', { category: CATEGORIES[text] });
-        bot.sendMessage(chatId,
-          `📍 *${CATEGORIES[text]}*\n\nQuelle est votre adresse à Dakar?\n(Ex: Plateau, Rue 10, près du marché)`,
-          { parse_mode: 'Markdown' }
-        );
+        await setSession(chatId, 'get_address', { category: CATEGORIES[text] }, lang);
+        bot.sendMessage(chatId, t(lang, 'ask_address', { category: CATEGORIES[text] }), { parse_mode: 'Markdown' });
       } else {
-        bot.sendMessage(chatId, `Veuillez choisir un numéro entre 1 et ${Object.keys(CATEGORIES).length}.`);
+        bot.sendMessage(chatId, t(lang, 'invalid_category'));
       }
       break;
 
-    // User: get address
     case 'get_address':
-      await setSession(chatId, 'get_description', { ...session.data, address: text });
-      bot.sendMessage(chatId,
-        `💬 Décrivez brièvement votre problème:\n(Ex: "Mon frigo ne refroidit plus depuis hier")`,
-        { parse_mode: 'Markdown' }
-      );
+      await setSession(chatId, 'get_description', { ...session.data, address: text }, lang);
+      bot.sendMessage(chatId, t(lang, 'ask_description'), { parse_mode: 'Markdown' });
       break;
 
-    // User: get description → find providers
     case 'get_description':
-      await setSession(chatId, 'waiting', { ...session.data, description: text });
+      await setSession(chatId, 'waiting', { ...session.data, description: text }, lang);
+      await bot.sendMessage(chatId, t(lang, 'searching'));
 
-      await bot.sendMessage(chatId, '🔍 Recherche du meilleur prestataire disponible...');
-
-      // Save request
-      const request = await saveRequest(
-        String(chatId),
-        session.data.category,
-        session.data.description,
-        session.data.address
-      );
-
+      const request = await saveRequest(String(chatId), session.data.category, text, session.data.address);
       if (request) {
-        session.data.requestId = request.id;
-
-        // Find providers
-        const categoryKey = Object.entries(CATEGORIES).find(([k, v]) => v === session.data.category)?.[0];
+        await setSession(chatId, 'waiting', { ...session.data, description: text, requestId: request.id }, lang);
         const providers = await findAvailableProviders(session.data.category);
-
-        // Update request count for providers
         for (const p of providers) {
-          await supabase
-            .from('providers')
-            .update({ total_requests: (p.total_requests || 0) + 1 })
-            .eq('id', p.id);
+          await supabase.from('providers').update({ total_requests: (p.total_requests || 0) + 1 }).eq('id', p.id);
         }
-
         if (providers.length === 0) {
-          session.state = 'idle';
-          bot.sendMessage(chatId,
-            `😔 *Aucun prestataire disponible pour le moment.*\n\n` +
-            `Réessayez dans 1 heure ou contactez-nous directement:\n📞 +221777527465`,
-            { parse_mode: 'Markdown' }
-          );
+          await clearSession(chatId);
+          bot.sendMessage(chatId, t(lang, 'no_provider'), { parse_mode: 'Markdown' });
         } else {
-          await notifyProviders(providers, request, bot);
-          bot.sendMessage(chatId,
-            `✅ *Demande envoyée!*\n\n` +
-            `Nous avons notifié *${providers.length} prestataire(s)* disponible(s).\n` +
-            `Vous serez contacté(e) très bientôt.\n\n` +
-            `⏱️ Si personne ne répond dans 5 minutes, nous vous préviendrons.\n\n` +
-            `📞 Support: +221777527465`,
-            { parse_mode: 'Markdown' }
-          );
-          // Start 5-minute timeout
-          setRequestTimeout(chatId, request.id);
+          await notifyProviders(providers, request, lang);
+          bot.sendMessage(chatId, t(lang, 'request_sent', { count: providers.length }), { parse_mode: 'Markdown' });
+          setRequestTimeout(chatId, request.id, lang);
         }
       }
       break;
 
-    // Rating flow
     case 'rating':
       const score = parseInt(text);
       if (score >= 1 && score <= 5) {
-        session.data.score = score;
-        session.state = 'rating_comment';
-        bot.sendMessage(chatId,
-          `Voulez-vous laisser un commentaire? (Tapez votre commentaire ou *IGNORER*)`,
-          { parse_mode: 'Markdown' }
-        );
+        await setSession(chatId, 'rating_comment', { ...session.data, score }, lang);
+        bot.sendMessage(chatId, t(lang, 'ask_comment'), { parse_mode: 'Markdown' });
       } else {
-        bot.sendMessage(chatId, 'Veuillez répondre avec un chiffre entre 1 et 5.');
+        bot.sendMessage(chatId, t(lang, 'rate_invalid'));
       }
       break;
 
     case 'rating_comment':
-      const comment = text === 'IGNORER' ? null : text;
-      await saveRating(
-        session.data.requestId,
-        session.data.providerId,
-        String(chatId),
-        session.data.score,
-        comment
-      );
-      clearSession(chatId);
-      bot.sendMessage(chatId,
-        `⭐ *Merci pour votre avis!*\n\nVotre évaluation aide la communauté Vitfe.\n\nTapez /start pour une nouvelle demande.`,
-        { parse_mode: 'Markdown' }
-      );
+      const skipWord = lang === 'en' ? 'SKIP' : 'IGNORER';
+      const comment = (text.toUpperCase() === 'SKIP' || text.toUpperCase() === 'IGNORER') ? null : text;
+      await saveRating(session.data.requestId, session.data.providerId, String(chatId), session.data.score, comment);
+      await clearSession(chatId);
+      bot.sendMessage(chatId, t(lang, 'rating_thanks'), { parse_mode: 'Markdown' });
       break;
 
-    // Provider — new or existing
     case 'provider_new_or_existing':
       if (text === '1') {
-        // Existing — ask for phone to link account
-        await setSession(chatId, 'provider_link', {});
-        bot.sendMessage(chatId,
-          `📱 Entrez le numéro WhatsApp utilisé lors de votre inscription:\n(Ex: +221771234567)`,
-          { parse_mode: 'Markdown' }
-        );
+        await setSession(chatId, 'provider_link', {}, lang);
+        bot.sendMessage(chatId, t(lang, 'ask_phone_link'), { parse_mode: 'Markdown' });
       } else if (text === '2') {
-        // New — full registration
-        await setSession(chatId, 'provider_register', { step: 'first_name' });
-        bot.sendMessage(chatId,
-          `👷 *Inscription prestataire Vitfe*\n\nPour commencer, quel est votre *prénom*?`,
-          { parse_mode: 'Markdown' }
-        );
+        await setSession(chatId, 'provider_register', { step: 'first_name' }, lang);
+        bot.sendMessage(chatId, t(lang, 'register_start'), { parse_mode: 'Markdown' });
       } else {
-        bot.sendMessage(chatId, 'Veuillez répondre avec *1* ou *2*.', { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, t(lang, 'invalid_choice'), { parse_mode: 'Markdown' });
       }
       break;
 
-    // Provider — link existing account
     case 'provider_link':
-      const { data: existingProvider } = await supabase
-        .from('providers')
-        .select('*')
-        .eq('phone', text)
-        .single();
-
+      const { data: existingProvider } = await supabase.from('providers').select('*').eq('phone', text).single();
       if (!existingProvider) {
-        bot.sendMessage(chatId,
-          `❌ Aucun compte trouvé avec ce numéro.\n\n` +
-          `Vérifiez le numéro ou tapez /start pour vous inscrire.`,
-          { parse_mode: 'Markdown' }
-        );
-        clearSession(chatId);
+        bot.sendMessage(chatId, t(lang, 'account_not_found'), { parse_mode: 'Markdown' });
+        await clearSession(chatId);
       } else {
-        // Link telegram_chat_id to existing provider
-        await supabase
-          .from('providers')
-          .update({ telegram_chat_id: String(chatId) })
-          .eq('phone', text);
-
-        clearSession(chatId);
+        await supabase.from('providers').update({ telegram_chat_id: String(chatId) }).eq('phone', text);
+        await clearSession(chatId);
         bot.sendMessage(chatId,
-          `✅ *Compte lié avec succès!*\n\n` +
-          `Bienvenue ${existingProvider.first_name} ${existingProvider.last_name}! 🎉\n\n` +
-          `${existingProvider.is_verified
-            ? '✅ Votre compte est vérifié. Vous recevrez les demandes de clients!'
-            : '⏳ Votre CNI est en cours de vérification.\nEnvoyez votre CNI à +221777527465 sur WhatsApp si ce n\'est pas encore fait.'}\n\n` +
-          `*Commandes utiles:*\n` +
-          `/dispo — Activer/désactiver disponibilité\n` +
-          `/stats — Voir vos statistiques\n` +
-          `/aide — Aide`,
+          t(lang, 'account_linked', {
+            name: `${existingProvider.first_name} ${existingProvider.last_name}`,
+            verified: t(lang, existingProvider.is_verified ? 'verified_yes' : 'verified_no')
+          }),
           { parse_mode: 'Markdown' }
         );
       }
       break;
 
-    // Provider registration flow
     case 'provider_register':
-      await handleProviderRegistration(chatId, text, session, setSession, clearSession, bot);
+      await handleProviderRegistration(chatId, text, session, lang);
       break;
 
     default:
-      // Unknown message — guide user back
-      bot.sendMessage(chatId,
-        `👋 Tapez /start pour commencer.\n\n` +
-        `Besoin d'aide? Contactez-nous:\n📞 +221777527465`,
-        { parse_mode: 'Markdown' }
-      );
+      bot.sendMessage(chatId, t(lang, 'fallback'), { parse_mode: 'Markdown' });
   }
 });
 
@@ -732,85 +583,53 @@ bot.on('message', async (msg) => {
 // PROVIDER REGISTRATION
 // ─────────────────────────────────────────
 
-async function handleProviderRegistration(chatId, text, session, setSession, clearSession, bot) {
+async function handleProviderRegistration(chatId, text, session, lang) {
   const step = session.data.step;
 
   if (step === 'first_name') {
-    await setSession(chatId, 'provider_register', { ...session.data, first_name: text, step: 'last_name' });
-    bot.sendMessage(chatId, `Votre *nom de famille*?`, { parse_mode: 'Markdown' });
+    await setSession(chatId, 'provider_register', { ...session.data, first_name: text, step: 'last_name' }, lang);
+    bot.sendMessage(chatId, t(lang, 'ask_lastname'), { parse_mode: 'Markdown' });
 
   } else if (step === 'last_name') {
-    await setSession(chatId, 'provider_register', { ...session.data, last_name: text, step: 'phone' });
-    bot.sendMessage(chatId, `Votre *numéro WhatsApp*? (Ex: +221771234567)`, { parse_mode: 'Markdown' });
+    await setSession(chatId, 'provider_register', { ...session.data, last_name: text, step: 'phone' }, lang);
+    bot.sendMessage(chatId, t(lang, 'ask_phone'), { parse_mode: 'Markdown' });
 
   } else if (step === 'phone') {
-    await setSession(chatId, 'provider_register', { ...session.data, phone: text, step: 'category' });
-    bot.sendMessage(chatId,
-      `Votre *métier*?\n\n${categoryMenu()}\n\nRépondez avec le numéro.`,
-      { parse_mode: 'Markdown' }
-    );
+    await setSession(chatId, 'provider_register', { ...session.data, phone: text, step: 'category' }, lang);
+    bot.sendMessage(chatId, t(lang, 'ask_job', { categories: categoryMenu() }), { parse_mode: 'Markdown' });
 
   } else if (step === 'category') {
-    if (!CATEGORIES[text]) {
-      return bot.sendMessage(chatId, 'Veuillez choisir un numéro valide.');
-    }
-    await setSession(chatId, 'provider_register', { ...session.data, category: CATEGORIES[text], step: 'address' });
-    bot.sendMessage(chatId, `Votre *adresse* à Dakar?`, { parse_mode: 'Markdown' });
+    if (!CATEGORIES[text]) return bot.sendMessage(chatId, t(lang, 'invalid_category'));
+    await setSession(chatId, 'provider_register', { ...session.data, category: CATEGORIES[text], step: 'address' }, lang);
+    bot.sendMessage(chatId, t(lang, 'ask_address_provider'), { parse_mode: 'Markdown' });
 
   } else if (step === 'address') {
-    await setSession(chatId, 'provider_register', { ...session.data, address: text, step: 'password' });
-    bot.sendMessage(chatId,
-      `Créez un *mot de passe* pour votre tableau de bord Vitfe.\n(Minimum 6 caractères)`,
-      { parse_mode: 'Markdown' }
-    );
+    await setSession(chatId, 'provider_register', { ...session.data, address: text, step: 'password' }, lang);
+    bot.sendMessage(chatId, t(lang, 'ask_password'), { parse_mode: 'Markdown' });
 
   } else if (step === 'password') {
-    if (text.length < 6) {
-      return bot.sendMessage(chatId, '❌ Mot de passe trop court. Minimum 6 caractères.');
-    }
-    await setSession(chatId, 'provider_register', { ...session.data, password: text, step: 'password' });
+    if (text.length < 6) return bot.sendMessage(chatId, t(lang, 'password_short'));
+    await setSession(chatId, 'provider_register', { ...session.data, password: text, step: 'done' }, lang);
 
-    // Save provider to database
-    const { data, error } = await supabase
-      .from('providers')
-      .insert([{
-        first_name: session.data.first_name,
-        last_name: session.data.last_name,
-        phone: session.data.phone,
-        password: session.data.password,
-        category: session.data.category,
-        city: 'Dakar',
-        address: session.data.address,
-        telegram_chat_id: String(chatId),
-        is_available: true,
-        is_verified: false
-      }])
-      .select()
-      .single();
+    const { data, error } = await supabase.from('providers').insert([{
+      first_name: session.data.first_name,
+      last_name: session.data.last_name,
+      phone: session.data.phone,
+      password: text,
+      category: session.data.category,
+      city: 'Dakar',
+      address: session.data.address,
+      telegram_chat_id: String(chatId),
+      is_available: true,
+      is_verified: false
+    }]).select().single();
 
     if (error) {
-      console.error('Provider registration error:', error);
-      if (error.code === '23505') {
-        bot.sendMessage(chatId, '❌ Ce numéro est déjà enregistré sur Vitfe.');
-      } else {
-        bot.sendMessage(chatId, '❌ Erreur lors de l\'inscription. Réessayez avec /start.');
-      }
+      console.error('Registration error:', error);
+      bot.sendMessage(chatId, t(lang, error.code === '23505' ? 'already_registered' : 'register_error'));
     } else {
-      clearSession(chatId);
-      bot.sendMessage(chatId,
-        `🎉 *Bienvenue sur Vitfe, ${session.data.first_name}!*\n\n` +
-        `✅ Votre compte a été créé.\n` +
-        `⏳ En attente de vérification CNI.\n\n` +
-        `*Prochaine étape:*\n` +
-        `Envoyez une photo de votre CNI recto-verso à:\n` +
-        `📞 +221777527465 sur WhatsApp\n\n` +
-        `Une fois vérifié, vous recevrez les demandes de clients!\n\n` +
-        `*Commandes utiles:*\n` +
-        `/dispo — Activer/désactiver disponibilité\n` +
-        `/stats — Voir vos statistiques\n` +
-        `/aide — Aide`,
-        { parse_mode: 'Markdown' }
-      );
+      await clearSession(chatId);
+      bot.sendMessage(chatId, t(lang, 'register_success', { name: session.data.first_name }), { parse_mode: 'Markdown' });
     }
   }
 }
