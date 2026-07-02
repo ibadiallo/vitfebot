@@ -146,8 +146,8 @@ function t(lang, key, vars = {}) {
   return msg;
 }
 
-// Categories — same in both languages (with emojis)
-const CATEGORIES = {
+// Categories — bilingual
+const CATEGORIES_FR = {
   '1': '🔧 Mécanicien',
   '2': '❄️ Technicien Frigo/Clim',
   '3': '⚡ Électricien',
@@ -161,8 +161,31 @@ const CATEGORIES = {
   '11': '➕ Autre'
 };
 
-function categoryMenu() {
-  return Object.entries(CATEGORIES).map(([k, v]) => `${k}. ${v}`).join('\n');
+const CATEGORIES_EN = {
+  '1': '🔧 Mechanic',
+  '2': '❄️ Fridge/AC Technician',
+  '3': '⚡ Electrician',
+  '4': '🚿 Plumber',
+  '5': '🪡 Tailor/Seamstress',
+  '6': '📱 Phone Repair',
+  '7': '🏠 Carpenter',
+  '8': '🎨 Painter',
+  '9': '🍽️ Caterer/Cook',
+  '10': '🛵 Delivery',
+  '11': '➕ Other'
+};
+
+// Keep CATEGORIES as French for backward compatibility with DB values
+const CATEGORIES = CATEGORIES_FR;
+
+function categoryMenu(lang = 'fr') {
+  const cats = lang === 'en' ? CATEGORIES_EN : CATEGORIES_FR;
+  return Object.entries(cats).map(([k, v]) => `${k}. ${v}`).join('\n');
+}
+
+function getCategoryName(num, lang = 'fr') {
+  const cats = lang === 'en' ? CATEGORIES_EN : CATEGORIES_FR;
+  return cats[num] || CATEGORIES_FR[num];
 }
 
 // ─────────────────────────────────────────
@@ -484,7 +507,7 @@ bot.on('message', async (msg) => {
     case 'main_menu':
       if (text === '1') {
         await setSession(chatId, 'select_category', {}, lang);
-        bot.sendMessage(chatId, t(lang, 'pick_category', { categories: categoryMenu() }), { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, t(lang, 'pick_category', { categories: categoryMenu(lang) }), { parse_mode: 'Markdown' });
       } else if (text === '2') {
         await setSession(chatId, 'provider_new_or_existing', {}, lang);
         bot.sendMessage(chatId, t(lang, 'provider_space'), { parse_mode: 'Markdown' });
@@ -494,9 +517,11 @@ bot.on('message', async (msg) => {
       break;
 
     case 'select_category':
-      if (CATEGORIES[text]) {
-        await setSession(chatId, 'get_address', { category: CATEGORIES[text] }, lang);
-        bot.sendMessage(chatId, t(lang, 'ask_address', { category: CATEGORIES[text] }), { parse_mode: 'Markdown' });
+      if (CATEGORIES_FR[text]) {
+        const categoryFR = CATEGORIES_FR[text]; // always store French in DB
+        const categoryDisplay = getCategoryName(text, lang); // show in user's language
+        await setSession(chatId, 'get_address', { category: categoryFR }, lang);
+        bot.sendMessage(chatId, t(lang, 'ask_address', { category: categoryDisplay }), { parse_mode: 'Markdown' });
       } else {
         bot.sendMessage(chatId, t(lang, 'invalid_category'));
       }
@@ -603,11 +628,11 @@ async function handleProviderRegistration(chatId, text, session, lang) {
 
   } else if (step === 'phone') {
     await setSession(chatId, 'provider_register', { ...session.data, phone: text, step: 'category' }, lang);
-    bot.sendMessage(chatId, t(lang, 'ask_job', { categories: categoryMenu() }), { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, t(lang, 'ask_job', { categories: categoryMenu(lang) }), { parse_mode: 'Markdown' });
 
   } else if (step === 'category') {
-    if (!CATEGORIES[text]) return bot.sendMessage(chatId, t(lang, 'invalid_category'));
-    await setSession(chatId, 'provider_register', { ...session.data, category: CATEGORIES[text], step: 'address' }, lang);
+    if (!CATEGORIES_FR[text]) return bot.sendMessage(chatId, t(lang, 'invalid_category'));
+    await setSession(chatId, 'provider_register', { ...session.data, category: CATEGORIES_FR[text], step: 'address' }, lang);
     bot.sendMessage(chatId, t(lang, 'ask_address_provider'), { parse_mode: 'Markdown' });
 
   } else if (step === 'address') {
