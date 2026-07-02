@@ -184,9 +184,20 @@ async function getSession(chatId) {
 }
 
 async function setSession(chatId, state, sessionData = {}, lang = null) {
-  const upsertData = { chat_id: String(chatId), state, session_data: sessionData, updated_at: new Date() };
-  if (lang) upsertData.lang = lang;
-  await supabase.from('sessions').upsert([upsertData], { onConflict: 'chat_id' });
+  // First get existing lang if not provided
+  let finalLang = lang;
+  if (!finalLang) {
+    try {
+      const { data } = await supabase.from('sessions').select('lang').eq('chat_id', String(chatId)).single();
+      finalLang = data?.lang || 'fr';
+    } catch (e) {
+      finalLang = 'fr';
+    }
+  }
+  await supabase.from('sessions').upsert(
+    [{ chat_id: String(chatId), state, session_data: sessionData, lang: finalLang, updated_at: new Date() }],
+    { onConflict: 'chat_id' }
+  );
 }
 
 async function setLang(chatId, lang) {
